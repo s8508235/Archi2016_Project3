@@ -456,6 +456,7 @@ void update_DPTE(int vpn)
         if(DTLB[i].ppn == ppn)
         {
             DTLB[i].last_used = -1;
+	    DTLB[i].valid = 0;
         }
     }
 
@@ -565,8 +566,8 @@ void finding_in_DTLB(int vpn)
 void print(int vpn){
 	int i;
 	printf("%d\n", vpn);
-	for(i = 0; i < Dinfo.MEM_size; i++){
-		printf("%4d->%4d\n", i, Dmemory[i].valid);
+	for(i = 0; i < Dinfo.TLB_entries; i++){
+		printf("%4d->%4d %d %d\n", DTLB[i].vpn, DTLB[i].ppn, DTLB[i].valid, i);
 	}	
 }
 
