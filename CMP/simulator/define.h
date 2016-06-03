@@ -1,5 +1,6 @@
 #ifndef DEFINE_H_INCLUDED
 #define DEFINE_H_INCLUDED
+#include <stdio.h>
 #include "stdlib.h"
 typedef struct TLB
 {

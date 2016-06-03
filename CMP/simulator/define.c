@@ -428,7 +428,7 @@ void update_DTLB(int vpn)
 }
 void update_DPTE(int vpn)
 {//need to swap first
-    int i,j,min = 2147483647;
+    int i,j,min = -1;
     int ppn = 0;
     for(i=0;i<Dinfo.MEM_entries;i++)
     {
@@ -443,7 +443,7 @@ void update_DPTE(int vpn)
             Dinfo.ppn = i;
             return ;
         }
-        else if(min == 2147483647 || Dmemory[i].last_used <min)
+        else if(min == -1 || Dmemory[i].last_used < min)
         {
             min = Dmemory[i].last_used;
             ppn = i;
@@ -562,11 +562,20 @@ void finding_in_DTLB(int vpn)
     finding_in_DPTE(vpn);
 }
 
+void print(int vpn){
+	int i;
+	printf("%d\n", vpn);
+	for(i = 0; i < Dinfo.MEM_size; i++){
+		printf("%4d->%4d\n", i, Dmemory[i].valid);
+	}	
+}
+
 void checkD(int VA,int cnt)
 {
     cycle = cnt;
     int vpn = VA/Dinfo.page_size;
     Dinfo.PageOffset = VA % Dinfo.page_size;
     finding_in_DTLB(vpn);
+    print(vpn);
     finding_in_DCA(Dinfo.ppn);
 }
