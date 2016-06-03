@@ -8,8 +8,8 @@ FILE *iImageData,*dImageData;
 int command_line_argument[12];
 int main(int argc,char* argv[])
 {
-    iImageData = fopen("./testcase/open_testcase/example1/iimage.bin","rb");//102062104_01 102062111 102062202_01
-    dImageData = fopen("./testcase/open_testcase/example1/dimage.bin","rb");//102070028_01
+    iImageData = fopen("./iimage.bin","rb");//102062104_01 102062111 102062202_01
+    dImageData = fopen("./dimage.bin","rb");//102070028_01
     if(argc==11)
     {
         command_line_argument[1]=atoi(argv[1]);

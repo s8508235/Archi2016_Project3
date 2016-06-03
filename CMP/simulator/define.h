@@ -1,7 +1,6 @@
 #ifndef DEFINE_H_INCLUDED
 #define DEFINE_H_INCLUDED
 #include "stdlib.h"
-#include "stdio.h"
 typedef struct TLB
 {
     unsigned vpn;

@@ -176,18 +176,18 @@ void update_ICache(int ppn)
             ICache[idx][change_idx].valid = 1;
             ICache[idx][change_idx].tag = tag;
         }
-
     }
 }
 void update_ITLB(int vpn)
 {
     int ppn = IPTE[vpn].ppn;
-    int i,tmp = 0,min = cycle+1;
+    int i,tmp = 0,min = 2147483647;
+
     for(i=0; i<Iinfo.TLB_entries; i++)
     {
-        if(ITLB[i].valid == 1)
+        if(ITLB[i].valid == 1 && ITLB[i].last_used>=0)
         {
-            if(ITLB[i].last_used < min)
+            if(ITLB[i].last_used < min )
             {
                 min = ITLB[i].last_used;
                 tmp = i;
@@ -205,38 +205,43 @@ void update_ITLB(int vpn)
     ITLB[tmp].vpn=vpn;
 }
 void update_IPTE(int vpn)
-{
+{//need to swap first
     int i,j,min = 2147483647;
+    int ppn = 0;
     for(i=0;i<Iinfo.MEM_entries;i++)
     {
-        if(Imemory[i].last_used == -1)
+        if(Imemory[i].valid == 0)
         {
-            Imemory[i].last_used = cycle;
-            IPTE[vpn].ppn = i;
+            ppn = i;
             IPTE[vpn].valid = 1;
+            IPTE[vpn].ppn = i;
+            Imemory[i].last_used = cycle;
+            Imemory[i].valid = 1;
             update_ITLB(vpn);
+            Iinfo.ppn = i;
             return ;
         }
-        else if(min == 2147483647 || Imemory[i].last_used < Imemory[min].last_used)
-            min = i;
+        else if(min == 2147483647 || Imemory[i].last_used <min)
+        {
+            min = Imemory[i].last_used;
+            ppn = i;
+        }
     }
-    Imemory[min].last_used = cycle;
-
+    Imemory[ppn].last_used = cycle;
+    Imemory[ppn].valid = 1;
     for(i=0;i<Iinfo.TLB_entries;i++)
     {
-        if(ITLB[i].ppn == min)
+        if(ITLB[i].ppn == ppn)
         {
             ITLB[i].last_used = -1;
-            break;
         }
     }
 
     for(i=0;i<Iinfo.PTE_entries;i++)
     {
-        if(IPTE[i].ppn == min)
+        if(IPTE[i].ppn == ppn)
         {
             IPTE[i].valid = 0;
-            break;
         }
     }
 
@@ -245,15 +250,25 @@ void update_IPTE(int vpn)
         int physical_address = min * Iinfo.page_size + i;
         int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
         int tag = physical_address / Iinfo.Block_size / Iinfo.CA_entries;
-        for(j=0;j<Iinfo.CA_entries;j++)
-            if(ICache[idx][j].tag ==tag)
-                ICache[idx][j].valid = 0;
+        if(Iinfo.CA_associate == 1)
+        {
+            if(ICache[idx][0].tag == tag)
+                ICache[idx][0].valid = 0;
+        }
+        else
+        {
+            for(j=0;j<Iinfo.CA_entries;j++)
+                if(ICache[idx][j].tag ==tag && ICache[idx][j].valid ==1)
+                    ICache[idx][j].valid = 0,ICache[idx][j].MRU = 0;
+        }
+
     }
 
-    IPTE[vpn].ppn = min;
+    IPTE[vpn].ppn = ppn;
     IPTE[vpn].valid =  1;
     update_ITLB(vpn);
-    Iinfo.ppn = min;
+
+    Iinfo.ppn =  IPTE[vpn].ppn;
 }
 void finding_in_ICA(int ppn)
 {
@@ -261,6 +276,7 @@ void finding_in_ICA(int ppn)
     int physical_address = ppn * Iinfo.page_size + Iinfo.PageOffset;
     int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
     int tag = physical_address / Iinfo.Block_size / Iinfo.CA_entries;
+
     if(Iinfo.CA_associate == 1)
     {//2a for special case
         if( tag==ICache[idx][0].tag && ICache[idx][0].valid==1)
@@ -283,9 +299,9 @@ void finding_in_ICA(int ppn)
             }
         }
     //2b
+    }
         Iresult.CAmiss ++;
         update_ICache(ppn);
-    }
 }
 void finding_in_IPTE(int vpn)
 {
@@ -293,6 +309,8 @@ void finding_in_IPTE(int vpn)
     {
         Iresult.PTEhit++;
         Imemory[IPTE[vpn].ppn].last_used = cycle;
+        Iinfo.ppn = IPTE[vpn].ppn;
+        update_ITLB(vpn);
         //tlb miss and pte hit 2c hit
     }
     else
@@ -300,10 +318,8 @@ void finding_in_IPTE(int vpn)
         Iresult.PTEmiss++;
         //tlb miss and pte miss 2d miss
         update_IPTE(vpn);
+        Imemory[IPTE[vpn].ppn].last_used = cycle;
     }
-    update_ITLB(vpn);
-    Iinfo.ppn = IPTE[vpn].ppn;
-    finding_in_ICA(Iinfo.ppn);
 }
 void finding_in_ITLB(int vpn)
 {
@@ -315,24 +331,24 @@ void finding_in_ITLB(int vpn)
         {
             Iresult.TLBhit++;
             ITLB[i].last_used = cycle;
-            Iinfo.ppn = ITLB[i].ppn;
-            finding_in_ICA(Iinfo.ppn);//1a hit
+            Iinfo.ppn = ITLB[i].ppn;//1a hit
             return ;
         }
     }
     //1b
     Iresult.TLBmiss ++;
     finding_in_IPTE(vpn);
-
 }
+
 void checkI(int VA,int cnt)
 {
     cycle = cnt;
     int vpn = VA/Iinfo.page_size;
     Iinfo.PageOffset = VA % Iinfo.page_size;
     finding_in_ITLB(vpn);
-
+    finding_in_ICA(Iinfo.ppn);
 }
+
 void update_DCache(int ppn)
 {
     int i;
@@ -390,7 +406,7 @@ void update_DTLB(int vpn)
     int i,tmp = 0,min = 2147483647;
 
     for(i=0; i<Dinfo.TLB_entries; i++)
-    {printf("last use in update tlb %d %d\n",DTLB[i].last_used,DTLB[i].valid);
+    {
         if(DTLB[i].valid == 1 && DTLB[i].last_used>=0)
         {
             if(DTLB[i].last_used < min )
@@ -424,9 +440,10 @@ void update_DPTE(int vpn)
             Dmemory[i].last_used = cycle;
             Dmemory[i].valid = 1;
             update_DTLB(vpn);
+            Dinfo.ppn = i;
             return ;
         }
-        else if(min == 2147483647 || Dmemory[i].last_used < Dmemory[min].last_used)
+        else if(min == 2147483647 || Dmemory[i].last_used <min)
         {
             min = Dmemory[i].last_used;
             ppn = i;
@@ -521,9 +538,9 @@ void finding_in_DPTE(int vpn)
     else
     {
         Dresult.PTEmiss++;
-        Dmemory[DPTE[vpn].ppn].last_used = cycle;
         //tlb miss and pte miss 2d miss
         update_DPTE(vpn);
+        Dmemory[DPTE[vpn].ppn].last_used = cycle;
     }
 }
 void finding_in_DTLB(int vpn)
