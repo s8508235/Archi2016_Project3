@@ -189,27 +189,26 @@ void update_ICache(int ppn)
 void update_ITLB(int vpn)
 {
     int ppn = IPTE[vpn].ppn;
-    int i,tmp = 0,min = -1;
+    int i,min = -1;
 
     for(i=0; i<Iinfo.TLB_entries; i++)
     {
         if(ITLB[i].last_used !=-1)
         {
-            if(ITLB[i].last_used < min ||min == -1)
+            if(ITLB[i].last_used < ITLB[min].last_used ||min == -1)
             {
-                min = ITLB[i].last_used;
-                tmp = i;
+                min = i;
             }
         }
         else
         {
-            tmp = i;
+            min = i;
             break;
         }
     }
-    ITLB[tmp].last_used=cycle;
-    ITLB[tmp].ppn=ppn;
-    ITLB[tmp].vpn=vpn;
+    ITLB[min].last_used=cycle;
+    ITLB[min].ppn=ppn;
+    ITLB[min].vpn=vpn;
 }
 void update_IPTE(int vpn)
 {
@@ -220,7 +219,6 @@ void update_IPTE(int vpn)
     {
         if(Imemory[i].valid == 0)
         {
-            ppn = i;
             IPTE[vpn].valid = 1;
             IPTE[vpn].ppn = i;
             Imemory[i].last_used = cycle;
@@ -255,7 +253,7 @@ void update_IPTE(int vpn)
 
     for(i=0; i<Iinfo.page_size; i++)
     {
-        int physical_address = min * Iinfo.page_size + i;
+        int physical_address = ppn * Iinfo.page_size + i;
         int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
         int tag = physical_address / Iinfo.Block_size / Iinfo.CA_entries;
         if(Iinfo.CA_associate == 1)
@@ -473,7 +471,7 @@ void update_DPTE(int vpn)
 
     for(i=0; i<Dinfo.page_size; i++)
     {
-        int physical_address = min * Dinfo.page_size + i;
+        int physical_address = ppn * Dinfo.page_size + i;
         int idx = physical_address / Dinfo.Block_size % Dinfo.CA_entries;
         int tag = physical_address / Dinfo.Block_size / Dinfo.CA_entries;
         if(Dinfo.CA_associate == 1)
@@ -586,7 +584,7 @@ void printDTLB()
     int i;
     for(i=0; i<Dinfo.TLB_entries; i++)
     {
-    //    printf("ppn:%4d vpn:%4d last:%4d valid:%4d\n",DTLB[i].ppn,DTLB[i].vpn,DTLB[i].last_used,DTLB[i].valid);
+        printf("ppn:%4d vpn:%4d last:%4d\n",DTLB[i].ppn,DTLB[i].vpn,DTLB[i].last_used);
     }
 }
 void printDPTE()
@@ -623,7 +621,7 @@ void printITLB()
     int i;
     for(i=0; i<Iinfo.TLB_entries; i++)
     {
-   //     printf("ppn:%4d vpn:%4d last:%4d valid:%4d\n",ITLB[i].ppn,ITLB[i].vpn,ITLB[i].last_used,ITLB[i].valid);
+        printf("ppn:%4d vpn:%4d last:%4d \n",ITLB[i].ppn,ITLB[i].vpn,ITLB[i].last_used);
     }
 }
 void printIPTE()

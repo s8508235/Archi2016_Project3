@@ -179,15 +179,11 @@ void instruction_R(int *code,unsigned *reg, int *pc)
             sft = sft <<1;
             sft +=code[i];
         }
-        if(rd==0)
+        reg[rd] = reg[rt] << sft;
+	if(rd==0)
         {
-            if(!(rt==0 && sft ==0))
-            {
-                reg[rd] = 0;
-            }
-
+            reg[rd] = 0;
         }
-        reg[rd] = reg[rt] <<sft;
     }
     else if (func == srl)
     {
