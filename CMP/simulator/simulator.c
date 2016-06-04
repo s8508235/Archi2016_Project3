@@ -8,8 +8,6 @@ FILE *iImageData,*dImageData;
 int command_line_argument[12];
 int main(int argc,char* argv[])
 {
-    iImageData = fopen("./iimage.bin","rb");//102062104_01 102062111 102062202_01
-    dImageData = fopen("./dimage.bin","rb");//102070028_01
     if(argc==11)
     {
         command_line_argument[1]=atoi(argv[1]);
@@ -36,13 +34,12 @@ int main(int argc,char* argv[])
         command_line_argument[9]=4;
         command_line_argument[10]=1;
     }
-    else printf("Format???\n");
 
     initI(command_line_argument[1],command_line_argument[3],command_line_argument[5],command_line_argument[6],command_line_argument[7]);
     initD(command_line_argument[2],command_line_argument[4],command_line_argument[8],command_line_argument[9],command_line_argument[10]);
 
-
-
+    iImageData = fopen("./iimage.bin","rb");//102062104_01 102062111 102062202_01
+    dImageData = fopen("./dimage.bin","rb");//102070028_01
     int isize,dsize;
     fseek(iImageData,0,SEEK_END);
     isize = ftell(iImageData);
@@ -153,14 +150,13 @@ int main(int argc,char* argv[])
         fprintf(out,"PC: 0x");
         fprintf(out,"%08X\n\n\n",pc+currpc);
         int temp_pc = currpc;
+        checkI(pc+currpc,cnt);
         int type = -1;
         {
-	    if(currpc>=0)
-        {
-            checkI(pc+currpc,cnt);
-            type = instruction_operation(asscode,reg,cnt,&currpc,Dmem,pc);
-        }
-
+            if(currpc>=0)
+            {
+                type = instruction_operation(asscode,reg,cnt,&currpc,Dmem,pc);
+            }
         }
         if(currpc <0 && type!=2)
         {
@@ -174,7 +170,7 @@ int main(int argc,char* argv[])
         }
         else if(type== 3) break;
         else if(type ==2)
-        {printf("%08x %08x\n",currpc , pc);
+        {
             if(currpc>pc)
             {
                 currpc -=pc;

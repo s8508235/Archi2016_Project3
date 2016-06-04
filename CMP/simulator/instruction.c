@@ -23,7 +23,6 @@ int instruction_operation(int *opcode,unsigned *reg,int c, int *pc,unsigned *Dme
         op_num  = op_num<< 1 ;
         op_num += opcode[i];
     }
-    printf("op:%d\n",op_num);
     if(op_num == 0)
     {
         instruction_R(opcode,reg,pc);
@@ -271,9 +270,7 @@ void instruction_J(int *code,int ct,unsigned *reg, int *pc)
     else if(ct==jal)
     {
         reg[31] = *pc+unmod_pc+4;
-        printf("%08x\n",reg[31]);
         *pc = ((*pc+unmod_pc+4)&j_mask)| (c<<2);
-        printf("%08x\n",*pc);
     }
 }
 void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
@@ -332,7 +329,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("lw!\n");
         checkD(addr,cycle);
         {
             reg[rt] = 0;
@@ -359,7 +355,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("lh!\n");
         checkD(addr,cycle);
         {
             reg[rt] = 0;
@@ -386,7 +381,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("lhu!\n");
         checkD(addr,cycle);
         {
             reg[rt] = 0;
@@ -413,7 +407,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("lb!\n");
         checkD(addr,cycle);
         {
             int tmp = 0;
@@ -442,7 +435,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("lbu!\n");
         checkD(addr,cycle);
         {
             reg[rt] = 0;
@@ -463,7 +455,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("sw!\n");
         checkD(addr,cycle);
         {
             int i;
@@ -490,7 +481,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("sh!\n");
         checkD(addr,cycle);
         {
             int i;
@@ -517,7 +507,6 @@ void instruction_I(int *code,int ct,unsigned *reg, int *pc,unsigned *Dmem)
             eximm = imm | mask_0;
         unsigned addr;//sign handle
         addr = eximm + reg[rs];
-        printf("sb!\n");
         checkD(addr,cycle);
         {
             int i;

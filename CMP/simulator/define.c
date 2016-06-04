@@ -27,7 +27,6 @@ void initI(int IMemsize,int IMemoryPageSize,int TotalSizeOfICache,int BlockSizeO
         ITLB[i].last_used=-1;
         ITLB[i].ppn=0;
         ITLB[i].vpn=0;
-        ITLB[i].valid=0;
     }
     for(i=0; i<Iinfo.MEM_entries; i++)
     {
@@ -82,7 +81,6 @@ void initD(int DMemorySize,int DMemoryPageSize,int TotalSizeOfDCache,int BlockSi
         DTLB[i].last_used=-1;
         DTLB[i].ppn=0;
         DTLB[i].vpn=0;
-        DTLB[i].valid=0;
     }
     for(i=0; i<Dinfo.MEM_entries; i++)
     {
@@ -108,7 +106,7 @@ void initD(int DMemorySize,int DMemoryPageSize,int TotalSizeOfDCache,int BlockSi
     Dresult.PTEhit=0;
     Dresult.PTEmiss=0;
 }
-void MRU_detect_change(int idx)
+void MRU_detect_change_I(int idx)
 {
     int i,flag = 0;
     for(i=0; i<Iinfo.CA_associate; i++)
@@ -127,67 +125,77 @@ void MRU_detect_change(int idx)
         }
     }
 }
+void MRU_detect_change_D(int idx)
+{
+    int i,flag = 0;
+    for(i=0; i<Dinfo.CA_associate; i++)
+    {
+        if(DCache[idx][i].MRU == 0)
+        {
+            flag = 1;
+            break;
+        }
+    }
+    if(flag == 0)
+    {
+        for(i=0; i<Dinfo.CA_associate; i++)
+        {
+            DCache[idx][i].MRU = 0;
+        }
+    }
+}
+
 void update_ICache(int ppn)
 {
     int i;
     int physical_address = ppn * Iinfo.page_size + Iinfo.PageOffset;
     int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
     int tag = physical_address / Iinfo.Block_size / Iinfo.CA_entries;
-
     int change_idx = 0,flag = 0;
-    if(Iinfo.CA_associate == 1)
+    for(i=0; i<Iinfo.CA_associate; i++)
     {
-        ICache[idx][0].MRU = 0;
-        ICache[idx][0].tag = tag;
-        ICache[idx][0].valid = 1;
+        if(ICache[idx][i].valid == 0)
+        {
+            change_idx = i;
+            flag = 1;
+            break;
+        }
+    }
+    if(flag == 1)
+    {
+        ICache[idx][change_idx].MRU = 1;
+        MRU_detect_change_I(idx);
+        ICache[idx][change_idx].MRU = 1;
+        ICache[idx][change_idx].valid = 1;
+        ICache[idx][change_idx].tag = tag;
     }
     else
     {
-        for(i=0;i<Iinfo.CA_associate;i++)
+        for(i=0; i<Iinfo.CA_associate; i++)
         {
-            if(ICache[idx][i].valid == 0)
+            if(ICache[idx][i].MRU == 0)
             {
                 change_idx = i;
-                flag = 1;
                 break;
             }
         }
-        if(flag == 1)
-        {
-            ICache[idx][change_idx].MRU = 1;
-            MRU_detect_change(idx);
-            ICache[idx][change_idx].MRU = 1;
-            ICache[idx][change_idx].valid = 1;
-            ICache[idx][change_idx].tag = tag;
-        }
-        else
-        {
-            for(i=0;i<Iinfo.CA_associate;i++)
-            {
-                if(ICache[idx][i].MRU == 0)
-                {
-                    change_idx = i;
-                    break;
-                }
-            }
-            ICache[idx][change_idx].MRU = 1;
-            MRU_detect_change(idx);
-            ICache[idx][change_idx].MRU = 1;
-            ICache[idx][change_idx].valid = 1;
-            ICache[idx][change_idx].tag = tag;
-        }
+        ICache[idx][change_idx].MRU = 1;
+        MRU_detect_change_I(idx);
+        ICache[idx][change_idx].MRU = 1;
+        ICache[idx][change_idx].valid = 1;
+        ICache[idx][change_idx].tag = tag;
     }
 }
 void update_ITLB(int vpn)
 {
     int ppn = IPTE[vpn].ppn;
-    int i,tmp = 0,min = 2147483647;
+    int i,tmp = 0,min = -1;
 
     for(i=0; i<Iinfo.TLB_entries; i++)
     {
-        if(ITLB[i].valid == 1 && ITLB[i].last_used>=0)
+        if(ITLB[i].last_used !=-1)
         {
-            if(ITLB[i].last_used < min )
+            if(ITLB[i].last_used < min ||min == -1)
             {
                 min = ITLB[i].last_used;
                 tmp = i;
@@ -200,15 +208,15 @@ void update_ITLB(int vpn)
         }
     }
     ITLB[tmp].last_used=cycle;
-    ITLB[tmp].valid=1;
     ITLB[tmp].ppn=ppn;
     ITLB[tmp].vpn=vpn;
 }
 void update_IPTE(int vpn)
-{//need to swap first
-    int i,j,min = 2147483647;
+{
+    //need to swap first
+    int i,j,min = -1;
     int ppn = 0;
-    for(i=0;i<Iinfo.MEM_entries;i++)
+    for(i=0; i<Iinfo.MEM_entries; i++)
     {
         if(Imemory[i].valid == 0)
         {
@@ -221,15 +229,15 @@ void update_IPTE(int vpn)
             Iinfo.ppn = i;
             return ;
         }
-        else if(min == 2147483647 || Imemory[i].last_used <min)
+        else if(min == -1 || Imemory[i].last_used <min)
         {
             min = Imemory[i].last_used;
             ppn = i;
         }
     }
     Imemory[ppn].last_used = cycle;
-    Imemory[ppn].valid = 1;
-    for(i=0;i<Iinfo.TLB_entries;i++)
+   // Imemory[ppn].valid = 1;
+    for(i=0; i<Iinfo.TLB_entries; i++)
     {
         if(ITLB[i].ppn == ppn)
         {
@@ -237,7 +245,7 @@ void update_IPTE(int vpn)
         }
     }
 
-    for(i=0;i<Iinfo.PTE_entries;i++)
+    for(i=0; i<Iinfo.PTE_entries; i++)
     {
         if(IPTE[i].ppn == ppn)
         {
@@ -245,7 +253,7 @@ void update_IPTE(int vpn)
         }
     }
 
-    for(i=0;i<Iinfo.page_size;i++)
+    for(i=0; i<Iinfo.page_size; i++)
     {
         int physical_address = min * Iinfo.page_size + i;
         int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
@@ -257,7 +265,7 @@ void update_IPTE(int vpn)
         }
         else
         {
-            for(j=0;j<Iinfo.CA_entries;j++)
+            for(j=0; j<Iinfo.CA_associate; j++)
                 if(ICache[idx][j].tag ==tag && ICache[idx][j].valid ==1)
                     ICache[idx][j].valid = 0,ICache[idx][j].MRU = 0;
         }
@@ -276,49 +284,49 @@ void finding_in_ICA(int ppn)
     int physical_address = ppn * Iinfo.page_size + Iinfo.PageOffset;
     int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
     int tag = physical_address / Iinfo.Block_size / Iinfo.CA_entries;
-
-    if(Iinfo.CA_associate == 1)
-    {//2a for special case
-        if( tag==ICache[idx][0].tag && ICache[idx][0].valid==1)
+//2a
+    for(i=0; i<Iinfo.CA_associate; i++)
+    {
+        if(tag == ICache[idx][i].tag && 1 == ICache[idx][i].valid )
         {
             Iresult.CAhit++;
+            ICache[idx][i].MRU = 1;
+            MRU_detect_change_I(idx);
+            ICache[idx][i].MRU = 1;
             return ;
         }
     }
-    else
-    {//2a
-        for(i=0;i<Iinfo.CA_associate;i++)
-        {
-            if(tag == ICache[idx][i].tag && ICache[idx][i].valid )
-            {
-                Iresult.CAhit++;
-                ICache[idx][i].MRU = 1;
-                MRU_detect_change(idx);
-                ICache[idx][i].MRU = 1;
-                return ;
-            }
-        }
-    //2b
+    Iresult.CAmiss ++;
+    if(Iinfo.CA_associate == 1)
+    {
+        ICache[idx][0].tag = tag;
+        ICache[idx][0].MRU = 1;
+        ICache[idx][0].valid = 1;
+        return ;
     }
-        Iresult.CAmiss ++;
+    else
+    {
         update_ICache(ppn);
+        //2b
+    }
+
 }
 void finding_in_IPTE(int vpn)
 {
     if(IPTE[vpn].valid ==1 )
     {
+        //tlb miss and pte hit 2c hit
         Iresult.PTEhit++;
+        update_ITLB(vpn);
         Imemory[IPTE[vpn].ppn].last_used = cycle;
         Iinfo.ppn = IPTE[vpn].ppn;
-        update_ITLB(vpn);
-        //tlb miss and pte hit 2c hit
     }
     else
+        //tlb miss and pte miss 2d miss
     {
         Iresult.PTEmiss++;
-        //tlb miss and pte miss 2d miss
+        //Imemory[IPTE[vpn].ppn].last_used = cycle;
         update_IPTE(vpn);
-        Imemory[IPTE[vpn].ppn].last_used = cycle;
     }
 }
 void finding_in_ITLB(int vpn)
@@ -327,7 +335,7 @@ void finding_in_ITLB(int vpn)
     int i ;
     for(i=0; i<Iinfo.TLB_entries; i++)
     {
-        if(ITLB[i].vpn == vpn && ITLB[i].valid == 1)
+        if(ITLB[i].vpn == vpn && ITLB[i].last_used != -1)
         {
             Iresult.TLBhit++;
             ITLB[i].last_used = cycle;
@@ -339,15 +347,21 @@ void finding_in_ITLB(int vpn)
     Iresult.TLBmiss ++;
     finding_in_IPTE(vpn);
 }
-
 void checkI(int VA,int cnt)
 {
     cycle = cnt;
     int vpn = VA/Iinfo.page_size;
+    //  printf("current:%8d\n",vpn);
     Iinfo.PageOffset = VA % Iinfo.page_size;
     finding_in_ITLB(vpn);
+    //  printITLB();
+    //  printIPTE();
+   //printf("ass%d\n",Iinfo.CA_associate);
     finding_in_ICA(Iinfo.ppn);
+   //printICache(Iinfo.ppn);
+//   printIMem();
 }
+
 
 void update_DCache(int ppn)
 {
@@ -355,49 +369,39 @@ void update_DCache(int ppn)
     int physical_address = ppn * Dinfo.page_size + Dinfo.PageOffset;
     int idx = physical_address / Dinfo.Block_size % Dinfo.CA_entries;
     int tag = physical_address / Dinfo.Block_size / Dinfo.CA_entries;
-
     int change_idx = 0,flag = 0;
-    if(Dinfo.CA_associate == 1)
+    for(i=0; i<Dinfo.CA_associate; i++)
     {
-        DCache[idx][0].MRU = 0;
-        DCache[idx][0].tag = tag;
-        DCache[idx][0].valid = 1;
+        if(DCache[idx][i].valid == 0)
+        {
+            change_idx = i;
+            flag = 1;
+            break;
+        }
+    }
+    if(flag == 1)
+    {
+        DCache[idx][change_idx].MRU = 1;
+        MRU_detect_change_D(idx);
+        DCache[idx][change_idx].MRU = 1;
+        DCache[idx][change_idx].valid = 1;
+        DCache[idx][change_idx].tag = tag;
     }
     else
     {
-        for(i=0;i<Dinfo.CA_associate;i++)
+        for(i=0; i<Dinfo.CA_associate; i++)
         {
-            if(DCache[idx][i].valid == 0)
+            if(DCache[idx][i].MRU == 0)
             {
                 change_idx = i;
-                flag = 1;
                 break;
             }
         }
-        if(flag == 1)
-        {
-            DCache[idx][change_idx].MRU = 1;
-            MRU_detect_change(idx);
-            DCache[idx][change_idx].MRU = 1;
-            DCache[idx][change_idx].valid = 1;
-            DCache[idx][change_idx].tag = tag;
-        }
-        else
-        {
-            for(i=0;i<Dinfo.CA_associate;i++)
-            {
-                if(DCache[idx][i].MRU == 0)
-                {
-                    change_idx = i;
-                    break;
-                }
-            }
-            DCache[idx][change_idx].MRU = 1;
-            MRU_detect_change(idx);
-            DCache[idx][change_idx].MRU = 1;
-            DCache[idx][change_idx].valid = 1;
-            DCache[idx][change_idx].tag = tag;
-        }
+        DCache[idx][change_idx].MRU = 1;
+        MRU_detect_change_D(idx);
+        DCache[idx][change_idx].MRU = 1;
+        DCache[idx][change_idx].valid = 1;
+        DCache[idx][change_idx].tag = tag;
     }
 }
 void update_DTLB(int vpn)
@@ -407,7 +411,7 @@ void update_DTLB(int vpn)
 
     for(i=0; i<Dinfo.TLB_entries; i++)
     {
-        if(DTLB[i].valid == 1 && DTLB[i].last_used>=0)
+        if(DTLB[i].last_used != -1)
         {
             if(DTLB[i].last_used < min )
             {
@@ -422,15 +426,15 @@ void update_DTLB(int vpn)
         }
     }
     DTLB[tmp].last_used=cycle;
-    DTLB[tmp].valid=1;
     DTLB[tmp].ppn=ppn;
     DTLB[tmp].vpn=vpn;
 }
 void update_DPTE(int vpn)
-{//need to swap first
+{
+    //need to swap first
     int i,j,min = -1;
     int ppn = 0;
-    for(i=0;i<Dinfo.MEM_entries;i++)
+    for(i=0; i<Dinfo.MEM_entries; i++)
     {
         if(Dmemory[i].valid == 0)
         {
@@ -443,7 +447,7 @@ void update_DPTE(int vpn)
             Dinfo.ppn = i;
             return ;
         }
-        else if(min == -1 || Dmemory[i].last_used < min)
+        else if(min == -1 || Dmemory[i].last_used <min)
         {
             min = Dmemory[i].last_used;
             ppn = i;
@@ -451,16 +455,15 @@ void update_DPTE(int vpn)
     }
     Dmemory[ppn].last_used = cycle;
     Dmemory[ppn].valid = 1;
-    for(i=0;i<Dinfo.TLB_entries;i++)
+    for(i=0; i<Dinfo.TLB_entries; i++)
     {
         if(DTLB[i].ppn == ppn)
         {
             DTLB[i].last_used = -1;
-	    DTLB[i].valid = 0;
         }
     }
 
-    for(i=0;i<Dinfo.PTE_entries;i++)
+    for(i=0; i<Dinfo.PTE_entries; i++)
     {
         if(DPTE[i].ppn == ppn)
         {
@@ -468,7 +471,7 @@ void update_DPTE(int vpn)
         }
     }
 
-    for(i=0;i<Dinfo.page_size;i++)
+    for(i=0; i<Dinfo.page_size; i++)
     {
         int physical_address = min * Dinfo.page_size + i;
         int idx = physical_address / Dinfo.Block_size % Dinfo.CA_entries;
@@ -480,7 +483,7 @@ void update_DPTE(int vpn)
         }
         else
         {
-            for(j=0;j<Dinfo.CA_entries;j++)
+            for(j=0; j<Dinfo.CA_associate; j++)
                 if(DCache[idx][j].tag ==tag && DCache[idx][j].valid ==1)
                     DCache[idx][j].valid = 0,DCache[idx][j].MRU = 0;
         }
@@ -499,49 +502,49 @@ void finding_in_DCA(int ppn)
     int physical_address = ppn * Dinfo.page_size + Dinfo.PageOffset;
     int idx = physical_address / Dinfo.Block_size % Dinfo.CA_entries;
     int tag = physical_address / Dinfo.Block_size / Dinfo.CA_entries;
-
-    if(Dinfo.CA_associate == 1)
-    {//2a for special case
-        if( tag==DCache[idx][0].tag && DCache[idx][0].valid==1)
+//2a
+    for(i=0; i<Dinfo.CA_associate; i++)
+    {
+        if(tag == DCache[idx][i].tag && 1 == DCache[idx][i].valid )
         {
             Dresult.CAhit++;
+            DCache[idx][i].MRU = 1;
+            MRU_detect_change_D(idx);
+            DCache[idx][i].MRU = 1;
             return ;
         }
     }
-    else
-    {//2a
-        for(i=0;i<Dinfo.CA_associate;i++)
-        {
-            if(tag == DCache[idx][i].tag && DCache[idx][i].valid )
-            {
-                Dresult.CAhit++;
-                DCache[idx][i].MRU = 1;
-                MRU_detect_change(idx);
-                DCache[idx][i].MRU = 1;
-                return ;
-            }
-        }
-    //2b
+    Dresult.CAmiss ++;
+    if(Dinfo.CA_associate == 1)
+    {
+        DCache[idx][0].tag = tag;
+        DCache[idx][0].MRU = 1;
+        DCache[idx][0].valid = 1;
+        return ;
     }
-        Dresult.CAmiss ++;
+    else
+    {
         update_DCache(ppn);
+        //2b
+    }
+
 }
 void finding_in_DPTE(int vpn)
 {
     if(DPTE[vpn].valid ==1 )
     {
+        //tlb miss and pte hit 2c hit
         Dresult.PTEhit++;
+        update_DTLB(vpn);
         Dmemory[DPTE[vpn].ppn].last_used = cycle;
         Dinfo.ppn = DPTE[vpn].ppn;
-        update_DTLB(vpn);
-        //tlb miss and pte hit 2c hit
     }
     else
+        //tlb miss and pte miss 2d miss
     {
         Dresult.PTEmiss++;
-        //tlb miss and pte miss 2d miss
+        //Dmemory[DPTE[vpn].ppn].last_used = cycle;
         update_DPTE(vpn);
-        Dmemory[DPTE[vpn].ppn].last_used = cycle;
     }
 }
 void finding_in_DTLB(int vpn)
@@ -550,7 +553,7 @@ void finding_in_DTLB(int vpn)
     int i ;
     for(i=0; i<Dinfo.TLB_entries; i++)
     {
-        if(DTLB[i].vpn == vpn && DTLB[i].valid == 1)
+        if(DTLB[i].vpn == vpn && DTLB[i].last_used != -1)
         {
             Dresult.TLBhit++;
             DTLB[i].last_used = cycle;
@@ -562,21 +565,91 @@ void finding_in_DTLB(int vpn)
     Dresult.TLBmiss ++;
     finding_in_DPTE(vpn);
 }
-
-void print(int vpn){
-	int i;
-	printf("%d\n", vpn);
-	for(i = 0; i < Dinfo.TLB_entries; i++){
-		printf("%4d->%4d %d %d\n", DTLB[i].vpn, DTLB[i].ppn, DTLB[i].valid, i);
-	}	
-}
-
 void checkD(int VA,int cnt)
 {
     cycle = cnt;
     int vpn = VA/Dinfo.page_size;
+    //  printf("current:%8d\n",vpn);
     Dinfo.PageOffset = VA % Dinfo.page_size;
     finding_in_DTLB(vpn);
-    print(vpn);
+    //  printTLB();
+    //  printPTE();
+   //printf("ass%d\n",Dinfo.CA_associate);
     finding_in_DCA(Dinfo.ppn);
+   //printCache(Dinfo.ppn);
+//   printMem();
+}
+
+void printDTLB()
+{
+    printf("TLB\n");
+    int i;
+    for(i=0; i<Dinfo.TLB_entries; i++)
+    {
+    //    printf("ppn:%4d vpn:%4d last:%4d valid:%4d\n",DTLB[i].ppn,DTLB[i].vpn,DTLB[i].last_used,DTLB[i].valid);
+    }
+}
+void printDPTE()
+{
+    printf("PTE\n");
+    int i;
+    for(i=0; i<Dinfo.PTE_entries; i++)
+    {
+        printf("ppn:%4d valid:%4d\n",DPTE[i].ppn,DPTE[i].valid);
+    }
+}
+void printDCache(int ppn)
+{
+    printf("Cache:%d\n",ppn);
+    int i;
+    int physical_address = ppn * Dinfo.page_size + Dinfo.PageOffset;
+    int idx = physical_address / Dinfo.Block_size % Dinfo.CA_entries;
+    for(i=0; i<Dinfo.CA_associate; i++)
+        printf("tag:%4d MRU:%4d valid:%4d   \n",DCache[idx][i].tag,DCache[idx][i].MRU,DCache[idx][i].valid);
+}
+void printDMem()
+{
+    printf("MEM\n");
+    int i;
+    for(i=0; i<Dinfo.MEM_entries; i++)
+    {
+        printf("last:%4d valid:%4d\n",Dmemory[i].last_used,Dmemory[i].valid);
+    }
+}
+
+void printITLB()
+{
+    printf("TLB\n");
+    int i;
+    for(i=0; i<Iinfo.TLB_entries; i++)
+    {
+   //     printf("ppn:%4d vpn:%4d last:%4d valid:%4d\n",ITLB[i].ppn,ITLB[i].vpn,ITLB[i].last_used,ITLB[i].valid);
+    }
+}
+void printIPTE()
+{
+    printf("PTE\n");
+    int i;
+    for(i=0; i<Iinfo.PTE_entries; i++)
+    {
+        printf("ppn:%4d valid:%4d\n",IPTE[i].ppn,IPTE[i].valid);
+    }
+}
+void printICache(int ppn)
+{
+    printf("Cache:%d\n",ppn);
+    int i;
+    int physical_address = ppn * Iinfo.page_size + Iinfo.PageOffset;
+    int idx = physical_address / Iinfo.Block_size % Iinfo.CA_entries;
+    for(i=0; i<Iinfo.CA_associate; i++)
+        printf("tag:%4d MRU:%4d valid:%4d   \n",ICache[idx][i].tag,ICache[idx][i].MRU,ICache[idx][i].valid);
+}
+void printIMem()
+{
+    printf("MEM\n");
+    int i;
+    for(i=0; i<Iinfo.MEM_entries; i++)
+    {
+        printf("last:%4d valid:%4d\n",Imemory[i].last_used,Imemory[i].valid);
+    }
 }
